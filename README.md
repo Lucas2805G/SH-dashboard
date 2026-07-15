@@ -16,8 +16,8 @@ La página web se conecta directamente a la API REST de Adafruit IO para consumi
 1. **Nivel de Ruido Actual:** Se actualiza automáticamente cada 3 segundos, cambiando de color según los umbrales configurados (Verde, Amarillo, Rojo).
 2. **Gráfico en Tiempo Real:** Dibuja la curva histórica de los últimos niveles de ruido registrados en la base de datos de Adafruit.
 
-🔗 Enlace al Proyecto
-
 🌐 **Ver Dashboard en vivo:** https://lucas2805g.github.io/SH-dashboard/
+
 ---
-*Desarrollado por el grupo de proyecto - 2026*
+
+*Desarrollado por el grupo del proyecto: Dylan Pointis, Santiago Bravo, Juan Ignacio Lambezat y Lucas Gomez - 2026*
