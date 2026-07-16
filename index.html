@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Semáforo de Silencio</title>
+    <link rel="manifest" href="manifest.json">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+
+        /* Variables base (Modo Oscuro) */
+        :root {
+            --bg-base: #0f172a;
+            --bg-card: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-blue: #38bdf8;
+            --status-green: #10b981;
+            --status-yellow: #f59e0b;
+            --status-red: #ef4444;
+            --status-offline: #64748b;
+            --card-border: #334155;
+        }
+
+        /* Variables Modo Proyector (Modo Claro) */
+        body.light-theme {
+            --bg-base: #f8fafc;
+            --bg-card: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --accent-blue: #0284c7;
+            --card-border: #e2e8f0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        body.alerta-critica { animation: bg-alerta 1s infinite alternate; }
+        @keyframes bg-alerta {
+            from { background-color: var(--bg-base); }
+            to { background-color: rgba(239, 68, 68, 0.1); }
+        }
+
+        .header { text-align: center; margin-bottom: 20px; padding-top: 10px; position: relative; }
+        .header h1 { margin: 0; font-weight: 800; font-size: 2.2rem; letter-spacing: -0.5px; color: var(--text-main); }
+        .header p { margin: 5px 0 15px 0; color: var(--accent-blue); font-weight: 600; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 1px; }
+
+        .global-controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 30px; flex-wrap: wrap; }
+        .btn-control {
+            background-color: var(--bg-card);
+            color: var(--text-main);
+            border: 1px solid var(--card-border);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        .btn-control:hover { filter: brightness(1.2); }
+        .btn-control.activo { border-color: var(--status-green); color: var(--status-green); }
+
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .card { background-color: var(--bg-card); border: 1px solid var(--card-border); border-radius: 12px; padding: 20px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column; justify-content: space-between; transition: all 0.3s ease; }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; color: var(--text-muted); font-size: 0.9rem; font-weight: 600; }
+        
+        .valor-principal { font-size: 3.5rem; font-weight: 800; line-height: 1; margin-bottom: 5px; color: var(--text-main); transition: color 0.3s; }
+        .valor-secundario { font-size: 2rem; font-weight: 600; color: var(--text-main); }
+        .unidad { font-size: 1rem; font-weight: 400; color: var(--text-muted); }
+        
+        .estado-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; background: rgba(255,255,255,0.1); }
+        
+        .chart-card { grid-column: 1 / -1; height: 400px; }
+        .chart-container { position: relative; height: 100%; width: 100%; padding-top: 10px; }
+        
+        .pulsar-verde { color: var(--status-green); text-shadow: 0 0 15px rgba(16,185,129,0.4); }
+        .pulsar-amarillo { color: var(--status-yellow); text-shadow: 0 0 15px rgba(245,158,11,0.4); }
+        .pulsar-rojo { color: var(--status-red); text-shadow: 0 0 15px rgba(239,68,68,0.4); }
+        .texto-offline { color: var(--status-offline); }
+        
+        .progress-bg { background-color: rgba(128,128,128,0.2); border-radius: 10px; height: 8px; width: 100%; margin-top: 15px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0%; border-radius: 10px; transition: width 0.4s ease, background-color 0.4s ease; }
+        
+        .chart-controls { display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn-filtro { background-color: transparent; color: var(--text-muted); border: 1px solid var(--card-border); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; transition: all 0.2s; }
+        .btn-filtro:hover { color: var(--text-main); border-color: var(--text-muted); }
+        .btn-filtro.activo { background-color: var(--accent-blue); color: var(--bg-base); border-color: var(--accent-blue); }
+        .btn-export { background-color: transparent; color: var(--status-green); border: 1px solid var(--status-green); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600; }
+        .btn-export:hover { background-color: var(--status-green); color: var(--bg-card); }
+    </style>
+</head>
+<body id="dashboard-body">
+
+    <div class="header">
+        <h1>Centro de Monitoreo Acústico</h1>
+        <p>Dashboard de Hardware en la Nube</p>
+    </div>
+
+    <div class="global-controls" data-html2canvas-ignore="true">
+        <button id="btnFullscreen" class="btn-control" onclick="toggleFullscreen()">⛶ Pantalla Completa</button>
+        <button id="btnTema" class="btn-control" onclick="toggleTema()">☀ Modo Proyector</button>
+        <button id="btnAudio" class="btn-control" onclick="toggleAudio()">🔇 Activar Alarmas</button>
+        <button class="btn-control" onclick="tomarCaptura()" style="border-color: var(--accent-blue); color: var(--accent-blue);">📸 Capturar Reporte</button>
+    </div>
+
+    <div class="dashboard">
+        <div class="card">
+            <div class="card-header">
+                <span>NIVEL ACTUAL</span>
+                <span id="badgeEstado" class="estado-badge">Buscando...</span>
+            </div>
+            <div id="ruidoActual" class="valor-principal">--</div>
+            <div class="progress-bg"><div id="barraRuido" class="progress-fill"></div></div>
+            <div id="textoActualizacion" style="color: var(--text-muted); font-size: 0.75rem; margin-top: 10px; text-align: center;">Sincronizando con el sensor...</div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><span>PROMEDIO</span><span style="color: var(--accent-blue); font-size: 1.8rem; font-weight: 800;">~</span></div>
+            <div><span id="promedioRuido" class="valor-secundario">--</span><span class="unidad"> pts</span></div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><span>PICO MÁXIMO</span><span style="color: var(--status-yellow); font-size: 1.5rem; font-weight: 800;">↗</span></div>
+            <div><span id="picoMaximo" class="valor-secundario">--</span><span class="unidad"> pts</span></div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><span>ALERTAS (>1300)</span><span style="color: var(--status-red); font-size: 1.5rem;">⚠</span></div>
+            <div><span id="excesosTotales" class="valor-secundario">--</span><span class="unidad"> eventos</span></div>
+        </div>
+
+        <div class="card chart-card">
+            <div class="card-header">
+                <span>TENDENCIA ACÚSTICA</span>
+                <div class="chart-controls" data-html2canvas-ignore="true">
+                    <button class="btn-filtro activo" onclick="cambiarFiltro(30, this)">En Vivo</button>
+                    <button class="btn-filtro" onclick="cambiarFiltro(300, this)">Últimos 15 Min</button>
+                    <button class="btn-filtro" onclick="cambiarFiltro(1000, this)">Última Hora</button>
+                    <button class="btn-export" onclick="descargarCSV()">↓ CSV</button>
+                </div>
+            </div>
+            <div class="chart-container"><canvas id="graficoRuido"></canvas></div>
+        </div>
+    </div>
+
+    <script>
+        const username = "DylanPointis";
+        const feed = "tpsemafororuido";
+        const apiLast = `https://io.adafruit.com/api/v2/${username}/feeds/${feed}/data/last`;
+        
+        let limiteGrafico = 30; 
+        let chartRuido;
+        let datasetHistorico = []; 
+        let audioHabilitado = false;
+        let audioCtx = null;
+        let tituloOriginal = document.title;
+        let intervaloTitulo = null;
+        let enAlerta = false;
+
+        // --- FUNCIONES NUEVAS: Tema y Captura ---
+        function toggleTema() {
+            document.body.classList.toggle('light-theme');
+            const btn = document.getElementById('btnTema');
+            if (document.body.classList.contains('light-theme')) {
+                btn.innerHTML = "🌙 Modo Oscuro";
+                // Forzar actualización del gráfico para que adapte los colores de las líneas guía
+                Chart.defaults.color = '#475569';
+                if(chartRuido) {
+                    chartRuido.options.scales.y.grid.color = '#e2e8f0';
+                    chartRuido.update('none');
+                }
+            } else {
+                btn.innerHTML = "☀ Modo Proyector";
+                Chart.defaults.color = '#94a3b8';
+                if(chartRuido) {
+                    chartRuido.options.scales.y.grid.color = '#1e293b';
+                    chartRuido.update('none');
+                }
+            }
+        }
+
+        function tomarCaptura() {
+            // html2canvas ignora los elementos con data-html2canvas-ignore="true" (los botones)
+            html2canvas(document.getElementById('dashboard-body'), {
+                backgroundColor: window.getComputedStyle(document.body).backgroundColor
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `Reporte_Acustico_${new Date().getTime()}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+
+        // --- FUNCIONES UX (Iguales a la versión anterior) ---
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => console.log(err));
+                document.getElementById('btnFullscreen').innerHTML = "✖ Salir Pantalla Completa";
+            } else {
+                document.exitFullscreen();
+                document.getElementById('btnFullscreen').innerHTML = "⛶ Pantalla Completa";
+            }
+        }
+
+        function toggleAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            audioHabilitado = !audioHabilitado;
+            const btn = document.getElementById('btnAudio');
+            if (audioHabilitado) {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                btn.innerHTML = "🔊 Alarmas Activadas";
+                btn.classList.add('activo');
+            } else {
+                btn.innerHTML = "🔇 Activar Alarmas";
+                btn.classList.remove('activo');
+                detenerAlertaVisual();
+            }
+        }
+
+        function emitirBeep() {
+            if (!audioHabilitado || !audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime); 
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.15); 
+        }
+
+        function manejarAlertas(valor) {
+            if (valor >= 1300) {
+                if (!enAlerta) {
+                    enAlerta = true;
+                    document.body.classList.add('alerta-critica');
+                    intervaloTitulo = setInterval(() => {
+                        document.title = document.title === tituloOriginal ? "⚠️ [CRÍTICO] Exceso Ruido" : tituloOriginal;
+                    }, 500);
+                }
+                emitirBeep(); 
+            } else {
+                if (enAlerta) detenerAlertaVisual();
+            }
+        }
+
+        function detenerAlertaVisual() {
+            enAlerta = false;
+            document.body.classList.remove('alerta-critica');
+            clearInterval(intervaloTitulo);
+            document.title = tituloOriginal;
+        }
+
+        // --- LÓGICA DE DATOS (Igual a la versión anterior) ---
+        function cambiarFiltro(limite, boton) {
+            limiteGrafico = limite;
+            document.querySelectorAll('.btn-filtro').forEach(btn => btn.classList.remove('activo'));
+            boton.classList.add('activo');
+            obtenerHistorial();
+        }
+
+        function calcularMetricas(valores) {
+            if(valores.length === 0) return;
+            const nums = valores.map(v => parseInt(v));
+            const suma = nums.reduce((a, b) => a + b, 0);
+            document.getElementById('promedioRuido').innerText = Math.round(suma / nums.length);
+            document.getElementById('picoMaximo').innerText = Math.max(...nums);
+            document.getElementById('excesosTotales').innerText = nums.filter(v => v >= 1300).length;
+        }
+
+        function descargarCSV() {
+            if(datasetHistorico.length === 0) return alert("No hay datos para exportar.");
+            let csvContent = "data:text/csv;charset=utf-8,Fecha,Hora,Nivel de Ruido\n";
+            datasetHistorico.forEach(row => {
+                const f = new Date(row.created_at);
+                csvContent += `${f.toLocaleDateString()},${f.toLocaleTimeString()},${row.value}\n`;
+            });
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI(csvContent));
+            link.setAttribute("download", `Data_Ruido_${new Date().getTime()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        async function obtenerNivelActual() {
+            try {
+                const response = await fetch(apiLast);
+                const data = await response.json();
+                
+                const valor = parseInt(data.value);
+                const fechaDato = new Date(data.created_at);
+                const ahora = new Date();
+                const diferenciaSegundos = (ahora - fechaDato) / 1000;
+                
+                const elemValor = document.getElementById('ruidoActual');
+                const badgeEstado = document.getElementById('badgeEstado');
+                const barraRuido = document.getElementById('barraRuido');
+                const textoActualizacion = document.getElementById('textoActualizacion');
+
+                elemValor.innerText = valor;
+                elemValor.className = 'valor-principal';
+
+                let porcentajeBarra = (valor / 2000) * 100;
+                if(porcentajeBarra > 100) porcentajeBarra = 100;
+                barraRuido.style.width = `${porcentajeBarra}%`;
+
+                if (diferenciaSegundos > 15) {
+                    elemValor.classList.add('texto-offline');
+                    badgeEstado.innerText = "DESCONECTADO";
+                    badgeEstado.style.backgroundColor = "transparent";
+                    badgeEstado.style.border = "1px solid var(--status-offline)";
+                    badgeEstado.style.color = "var(--status-offline)";
+                    barraRuido.style.backgroundColor = "var(--status-offline)";
+                    textoActualizacion.innerText = `Última señal hace ${Math.round(diferenciaSegundos)} seg.`;
+                    detenerAlertaVisual();
+                } else {
+                    textoActualizacion.innerText = "Sensor Online - Actualizando...";
+                    badgeEstado.style.border = "none";
+                    
+                    manejarAlertas(valor);
+
+                    if(valor >= 1300) {
+                        elemValor.classList.add('pulsar-rojo');
+                        badgeEstado.innerText = "CRÍTICO";
+                        badgeEstado.style.backgroundColor = "rgba(239,68,68,0.2)";
+                        badgeEstado.style.color = "var(--status-red)";
+                        barraRuido.style.backgroundColor = "var(--status-red)";
+                    } else if (valor >= 600) {
+                        elemValor.classList.add('pulsar-amarillo');
+                        badgeEstado.innerText = "MODERADO";
+                        badgeEstado.style.backgroundColor = "rgba(245,158,11,0.2)";
+                        badgeEstado.style.color = "var(--status-yellow)";
+                        barraRuido.style.backgroundColor = "var(--status-yellow)";
+                    } else {
+                        elemValor.classList.add('pulsar-verde');
+                        badgeEstado.innerText = "SILENCIO";
+                        badgeEstado.style.backgroundColor = "rgba(16,185,129,0.2)";
+                        badgeEstado.style.color = "var(--status-green)";
+                        barraRuido.style.backgroundColor = "var(--status-green)";
+                    }
+                }
+            } catch (error) {
+                console.error("Error obteniendo actual:", error);
+            }
+        }
+
+        async function obtenerHistorial() {
+            try {
+                const apiFiltro = `https://io.adafruit.com/api/v2/${username}/feeds/${feed}/data?limit=${limiteGrafico}`;
+                const response = await fetch(apiFiltro);
+                const data = await response.json();
+                
+                datasetHistorico = data; 
+                const dataInvertida = [...data].reverse(); 
+
+                const etiquetas = dataInvertida.map(d => {
+                    const f = new Date(d.created_at);
+                    return `${f.getHours().toString().padStart(2,'0')}:${f.getMinutes().toString().padStart(2,'0')}:${f.getSeconds().toString().padStart(2,'0')}`;
+                });
+                const valores = dataInvertida.map(d => parseInt(d.value));
+
+                calcularMetricas(valores);
+                actualizarGrafico(etiquetas, valores);
+            } catch (error) {
+                console.error("Error historial:", error);
+            }
+        }
+
+        function actualizarGrafico(etiquetas, valores) {
+            const ctx = document.getElementById('graficoRuido').getContext('2d');
+            
+            if (chartRuido) {
+                chartRuido.data.labels = etiquetas;
+                chartRuido.data.datasets[0].data = valores;
+                chartRuido.update('none'); 
+            } else {
+                Chart.defaults.color = document.body.classList.contains('light-theme') ? '#475569' : '#94a3b8';
+                Chart.defaults.font.family = 'Inter';
+
+                chartRuido = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: etiquetas,
+                        datasets: [{
+                            label: 'Nivel de Ruido',
+                            data: valores,
+                            borderColor: '#38bdf8', 
+                            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.1,
+                            pointBackgroundColor: '#0f172a',
+                            pointBorderColor: '#38bdf8',
+                            pointRadius: limiteGrafico > 100 ? 0 : 3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false, 
+                        plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e293b', titleColor: '#f8fafc', bodyColor: '#f8fafc', borderColor: '#334155', borderWidth: 1 } },
+                        scales: {
+                            y: { beginAtZero: true, suggestedMax: 1500, grid: { color: document.body.classList.contains('light-theme') ? '#e2e8f0' : '#1e293b' }, border: { display: false } },
+                            x: { grid: { display: false }, border: { display: false }, ticks: { maxTicksLimit: 8 } }
+                        }
+                    }
+                });
+            }
+        }
+
+        obtenerNivelActual();
+        obtenerHistorial();
+        setInterval(() => { obtenerNivelActual(); obtenerHistorial(); }, 3000);
+
+        // --- REGISTRO DEL SERVICE WORKER (Para PWA) ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((reg) => console.log('Service Worker registrado.', reg))
+                    .catch((err) => console.log('Error en Service Worker.', err));
+            });
+        }
+
+    </script>
+</body>
+</html>
