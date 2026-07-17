@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Semáforo de Silencio</title>
     <!-- Truco de cache busting para forzar al navegador a leer la PWA de cero -->
-    <link rel="manifest" href="manifest.json?v=3">
+    <link rel="manifest" href="manifest.json?v=4">
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -319,8 +319,12 @@
                 elemValor.className = 'valor-principal';
                 elemValor.innerText = valorActual;
 
-                let porcentajeBarra = ((valorActual - 30) / (110 - 30)) * 100;
+                // --- NUEVO CÁLCULO DINÁMICO DE LA BARRA ---
+                let pisoBarra = limiteTolerancia > 30 ? 30 : 0;
+                let topeBarra = limiteTolerancia + 20; 
+                let porcentajeBarra = ((valorActual - pisoBarra) / (topeBarra - pisoBarra)) * 100;
                 barraRuido.style.width = `${Math.max(0, Math.min(100, porcentajeBarra))}%`;
+                // ------------------------------------------
 
                 // CÁLCULO DINÁMICO DEL LÍMITE MODERADO
                 const limiteModerado = limiteTolerancia - 10;
