@@ -125,23 +125,26 @@
                 <span>NIVEL ACTUAL</span>
                 <span id="badgeEstado" class="estado-badge">Buscando...</span>
             </div>
-            <div id="ruidoActual" class="valor-principal">--</div>
+            <div style="display: flex; align-items: baseline; justify-content: center; gap: 5px;">
+                <div id="ruidoActual" class="valor-principal">--</div>
+                <span class="unidad" style="font-size: 1.5rem;">dB</span>
+            </div>
             <div class="progress-bg"><div id="barraRuido" class="progress-fill"></div></div>
             <div id="textoActualizacion" style="color: var(--text-muted); font-size: 0.75rem; margin-top: 10px; text-align: center;">Sincronizando con el sensor...</div>
         </div>
 
         <div class="card">
             <div class="card-header"><span>PROMEDIO</span><span style="color: var(--accent-blue); font-size: 1.8rem; font-weight: 800;">~</span></div>
-            <div><span id="promedioRuido" class="valor-secundario">--</span><span class="unidad"> pts</span></div>
+            <div><span id="promedioRuido" class="valor-secundario">--</span><span class="unidad"> dB</span></div>
         </div>
 
         <div class="card">
             <div class="card-header"><span>PICO MÁXIMO</span><span style="color: var(--status-yellow); font-size: 1.5rem; font-weight: 800;">↗</span></div>
-            <div><span id="picoMaximo" class="valor-secundario">--</span><span class="unidad"> pts</span></div>
+            <div><span id="picoMaximo" class="valor-secundario">--</span><span class="unidad"> dB</span></div>
         </div>
 
         <div class="card">
-            <div class="card-header"><span>ALERTAS (>1300)</span><span style="color: var(--status-red); font-size: 1.5rem;">⚠</span></div>
+            <div class="card-header"><span>ALERTAS (>70 dB)</span><span style="color: var(--status-red); font-size: 1.5rem;">⚠</span></div>
             <div><span id="excesosTotales" class="valor-secundario">--</span><span class="unidad"> eventos</span></div>
         </div>
 
@@ -162,7 +165,6 @@
     <script>
         const username = "DylanPointis";
         const feed = "tpsemafororuido";
-        // Ya no necesitamos la URL de apiLast porque usamos una sola petición unificada
         
         let limiteGrafico = 30; 
         let chartRuido;
@@ -245,7 +247,8 @@
         }
 
         function manejarAlertas(valor) {
-            if (valor >= 1300) {
+            // Adaptado a 70 dB
+            if (valor >= 70) {
                 if (!enAlerta) {
                     enAlerta = true;
                     document.body.classList.add('alerta-critica');
@@ -273,12 +276,13 @@
             const suma = nums.reduce((a, b) => a + b, 0);
             document.getElementById('promedioRuido').innerText = Math.round(suma / nums.length);
             document.getElementById('picoMaximo').innerText = Math.max(...nums);
-            document.getElementById('excesosTotales').innerText = nums.filter(v => v >= 1300).length;
+            // Filtra solo los eventos mayores o iguales a 70 dB
+            document.getElementById('excesosTotales').innerText = nums.filter(v => v >= 70).length;
         }
 
         function descargarCSV() {
             if(datasetHistorico.length === 0) return alert("No hay datos para exportar.");
-            let csvContent = "data:text/csv;charset=utf-8,Fecha,Hora,Nivel de Ruido\n";
+            let csvContent = "data:text/csv;charset=utf-8,Fecha,Hora,Nivel de Ruido (dB)\n";
             datasetHistorico.forEach(row => {
                 const f = new Date(row.created_at);
                 csvContent += `${f.toLocaleDateString()},${f.toLocaleTimeString()},${row.value}\n`;
@@ -293,16 +297,14 @@
 
         async function obtenerDatosYActualizar() {
             try {
-                // Realizamos una única consulta para obtener el historial completo
                 const apiFiltro = `https://io.adafruit.com/api/v2/${username}/feeds/${feed}/data?limit=${limiteGrafico}`;
                 const response = await fetch(apiFiltro);
                 const data = await response.json();
                 
-                if (data.length === 0) return; // Si no hay datos, cortamos la ejecución
+                if (data.length === 0) return; 
 
                 datasetHistorico = data; 
                 
-                // 1. LÓGICA DE NIVEL ACTUAL (Usamos el dato más reciente en la posición 0)
                 const ultimoDato = data[0];
                 const valorActual = parseInt(ultimoDato.value);
                 const fechaDato = new Date(ultimoDato.created_at);
@@ -317,9 +319,10 @@
                 elemValor.innerText = valorActual;
                 elemValor.className = 'valor-principal';
 
-                // Límite de la barra (El ESP32 tira hasta 4095)
-                let porcentajeBarra = (valorActual / 4095) * 100;
+                // Límite de la barra (mapeado de 30 dB a 110 dB aproximadamente)
+                let porcentajeBarra = ((valorActual - 30) / (110 - 30)) * 100;
                 if(porcentajeBarra > 100) porcentajeBarra = 100;
+                if(porcentajeBarra < 0) porcentajeBarra = 0;
                 barraRuido.style.width = `${porcentajeBarra}%`;
 
                 if (diferenciaSegundos > 15) {
@@ -337,13 +340,14 @@
                     
                     manejarAlertas(valorActual);
 
-                    if(valorActual >= 1300) {
+                    // Límites de color actualizados para decibeles
+                    if(valorActual >= 70) {
                         elemValor.classList.add('pulsar-rojo');
                         badgeEstado.innerText = "CRÍTICO";
                         badgeEstado.style.backgroundColor = "rgba(239,68,68,0.2)";
                         badgeEstado.style.color = "var(--status-red)";
                         barraRuido.style.backgroundColor = "var(--status-red)";
-                    } else if (valorActual >= 600) {
+                    } else if (valorActual >= 55) {
                         elemValor.classList.add('pulsar-amarillo');
                         badgeEstado.innerText = "MODERADO";
                         badgeEstado.style.backgroundColor = "rgba(245,158,11,0.2)";
@@ -358,7 +362,6 @@
                     }
                 }
 
-                // 2. LÓGICA DEL GRÁFICO HISTÓRICO
                 const dataInvertida = [...data].reverse(); 
 
                 const etiquetas = dataInvertida.map(d => {
@@ -391,7 +394,7 @@
                     data: {
                         labels: etiquetas,
                         datasets: [{
-                            label: 'Nivel de Ruido',
+                            label: 'Nivel de Ruido (dB)',
                             data: valores,
                             borderColor: '#38bdf8', 
                             backgroundColor: 'rgba(56, 189, 248, 0.1)',
@@ -409,7 +412,8 @@
                         animation: false, 
                         plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e293b', titleColor: '#f8fafc', bodyColor: '#f8fafc', borderColor: '#334155', borderWidth: 1 } },
                         scales: {
-                            y: { beginAtZero: true, suggestedMax: 1500, grid: { color: document.body.classList.contains('light-theme') ? '#e2e8f0' : '#1e293b' }, border: { display: false } },
+                            // Eje Y actualizado con piso de 30 dB
+                            y: { min: 30, suggestedMax: 100, grid: { color: document.body.classList.contains('light-theme') ? '#e2e8f0' : '#1e293b' }, border: { display: false } },
                             x: { grid: { display: false }, border: { display: false }, ticks: { maxTicksLimit: 8 } }
                         }
                     }
@@ -424,7 +428,6 @@
             obtenerDatosYActualizar();
         }
 
-        // Ejecutamos la función unificada y la repetimos cada 3 segundos
         obtenerDatosYActualizar();
         setInterval(obtenerDatosYActualizar, 3000);
 
